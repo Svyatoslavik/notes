@@ -208,7 +208,7 @@ The agent will notify the client and offer another time.
 |----------|--------|--------|
 | `acculynx_booking_duration` | Appointment duration | 120
 | `acculynx_show_for_days` | How many days ahead of the requested date the agent will search for slots. | 7
-| `aculynx_availability_offset` | Minimum lead time from today before slots are shown. Use 2 to prevent same-day bookings, 0 to allow them. | 2 
+| `acculynx_availability_offset` | Minimum lead time from today before slots are shown. Use 2 to prevent same-day bookings, 0 to allow them. | 2 
 | `acculynx_workday_start_time` | This time need for auto generate available time slots | 09:00:00
 | `acculynx_workday_end_time` | This time need for auto generate available time slots | 17:00:00
 | `acculynx_skip_weekend` | Once the system generates available time slots, this option will allow you to skip Saturday and Sunday. | True
