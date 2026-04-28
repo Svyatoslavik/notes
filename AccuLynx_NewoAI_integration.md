@@ -127,11 +127,11 @@ Select one or more employees based on the zip codes.
 There used next format:
 Person name: ["zipCode", "zipCode2", ...]
 Zip Codes:
-   * Kirk Kupsky:  ["62018", "62025", "62034"]
-   * Kyle Naes AND Andrew Green: ["62254", "62255", "62264"] 
-   * Sviatoslav Mysachenko: if zip code: between 630xx and 658xx
+   * Aphex Twin:  ["62018", "62025", "62034"]
+   * Will Smith AND Jim Carrey: ["62254", "62255", "62264"] 
+   * Alex G: if zip code: between 630xx and 658xx
 
-In other cases select multipe person: Kirk Kupsky, Kyle Naes, Andrew Green, Christopher Conaway
+In other cases select multipe person: Will Smith, Jim Carrey, Alex G
 Return employee_ids ordered by priority. If there are no suitable employees, return an empty list.
 ```
 
@@ -234,9 +234,173 @@ The agent will notify the client and offer another time.
 | `acculynx_connector` | Connector name the integration uses to talk to AccuLynx HTTP.
 ---
 
-
 ## Notes
 
 - Phone number is the primary customer identifier  
 - All conversation details are saved into job notes  
 - Works in both voice and chat channels  
+
+## AccuLynx API Integration
+
+| | |
+|------------|------------------------|
+| API Docs | https://apidocs.acculynx.com/reference/getcalendars|
+
+### Flow: Collect static data
+
+Collect Trade Types
+| Method | URL |
+|-----|---------|
+| GET | https://api.acculynx.com/api/v2/company-settings/job-file-settings/trade-types |
+
+Collect Work Types
+
+| Method | URL |
+|-----|---------|
+| GET | https://api.acculynx.com/api/v2/company-settings/job-file-settings/work-types |
+
+Get Active Lead Sources for a company.
+
+| Method | URL |
+|-----|---------|
+| GET | https://api.acculynx.com/api/v2/company-settings/leads/lead-sources |
+
+Get company employees
+| Method | URL |
+|-----|---------|
+| GET | https://api.acculynx.com/api/v2/users |
+
+Get Job Categories of the company
+| Method | URL |
+|-----|---------|
+| GET | https://api.acculynx.com/api/v2/company-settings/job-file-settings/job-categories |
+
+Get the contact types
+| Method | URL |
+|-----|---------|
+| GET | https://api.acculynx.com/api/v2/contacts/contact-types |
+
+### Flow: New appointment booking
+
+#### Step 1 → Identify the caller 
+Since the agent collects the caller's phone number we should try to identify customer
+Since the phone number search doesn't work in the endpoint https://api.acculynx.com/api/v2/contacts/search, we use a different endpoint for job search.
+
+| Method | URL |
+|-----|---------|
+| POST | https://api.acculynx.com/api/v2/jobs/search |
+
+with next body
+```
+{
+  "geoLocation": {
+    "mapRadius": 1
+  },
+  "searchTerm": "{phone_number}"
+}
+```
+
+Then check result, in case when contact found - we moving to step **Create New Job** otherwise go to **Create New Contact**
+
+#### Step 2 → Create New Contact
+If the contact was not found in the previous step, do next:
+| Method | URL |
+|-----|---------|
+| POST | https://api.acculynx.com/api/v2/contacts |
+
+With next payload:
+```
+{
+    "contactTypeIds": ["{contactTypeId}", ...],
+    "firstName": "{first_name}",
+    "lastName": "{last_name}",
+    "phoneNumbers": [{
+        "number": "{mobile_number}",
+        "primary": true,
+        "type": "Mobile"
+    }],
+    "emailAddresses": [{
+        "address": "{email}",
+        "primary": true,
+        "type": "Other"
+    }],
+}
+```
+
+
+#### Step 3 → Create New Job
+If we know the contact id, we can create a new Lead via create new Job api call
+
+| Method | URL |
+|-----|---------|
+| POST | https://api.acculynx.com/api/v2/jobs |
+
+With next payload (example of real data):
+```
+{
+    "contact": {
+        "id": "fce207e9-22c2-4e25-b462-aa64fb4f1c6b",
+    },
+    "locationAddress": {
+        "street1": "2200 292nd Street",
+        "city": "Federal Way",
+        "state": "WA",
+        "country": "US",
+        "zipCode": "98003"
+    },
+    "priority": "Normal",
+    "notes": "The user is requesting a home inspection. The service type needed is a routine diagnostic/inspection. The core issue is to inspect the home.",
+    "leadSource": {
+        "id": "68567bd5-f87e-e811-9103-0cc47aa3a68a"
+    },
+    "workType": {
+        "id": 6
+    },
+    "jobCategory": {
+        "id": 1
+    }
+}
+```
+#### Step 4 → Assign an employee to this Job (LEAD).
+If job was created succesfully in previous step then need to assign employee to this job via api call:
+
+| Method | URL |
+|-----|---------|
+| POST | https://api.acculynx.com/api/v2/jobs/{jobId}/representatives/company |
+
+with next payload:
+```
+{
+    "id": "{employee_id}"
+}
+```
+#### Step 5 → Create Initial Appointment
+When empolee was assigned succusfully next step is create initial appointemnt, to do this need to call next endpoint:
+
+| Method | URL |
+|-----|---------|
+| POST | https://api.acculynx.com/api/v2/jobs/{jobId}/initial-appointment |
+
+With next payload:
+```
+{
+    "startDate": start_time,
+    "endDate": end_time
+}
+```
+
+### Flow: Check Availability
+Based on static data, LLM should select employees based on work type or location, then need to get callendars for each employee (one employee per request)
+
+To get an employee's schedule, you need to call the following endpoint:
+
+| Method | URL |
+|-----|---------|
+| GET | https://api.acculynx.com/api/v2/calendars/{calendarId}/appointments |
+
+With next query parameters: `startDate` and `endDate`
+
+### Flow: Cancellation
+If the customer wants to cancel, the agent collects the request and forwards it to the team. The actual cancellation is handled manually (AccuLynx API limitation).
+
+No API calls are required for this flow.
